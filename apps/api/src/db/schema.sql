@@ -5,6 +5,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     github_id VARCHAR(255) UNIQUE,
+    github_token TEXT,
     email VARCHAR(255) UNIQUE,
     name VARCHAR(255),
     avatar_url VARCHAR(255),
@@ -44,6 +45,7 @@ CREATE TABLE IF NOT EXISTS projects (
     build_command VARCHAR(255),
     output_dir VARCHAR(255),
     install_command VARCHAR(255),
+    webhook_secret VARCHAR(255),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_team_project_slug UNIQUE (team_id, slug)

@@ -3,6 +3,9 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import cors from '@fastify/cors';
 import { healthRoutes } from './routes/health.js';
+import { authRoutes } from './routes/auth.js';
+import { projectRoutes } from './routes/projects.js';
+import { tokenRoutes } from './routes/tokens.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -50,6 +53,11 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Register health routes
   await app.register(healthRoutes);
+
+  // Register feature routes
+  await app.register(authRoutes);
+  await app.register(projectRoutes);
+  await app.register(tokenRoutes);
 
   // Global Error Handler
   app.setErrorHandler((error, request, reply) => {

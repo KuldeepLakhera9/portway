@@ -1,10 +1,9 @@
-import * as dotenv from 'dotenv';
+import 'dotenv/config';
 import { buildApp } from './app.js';
 import { migrate } from './db/migrate.js';
 import { db } from './db/index.js';
 import { redis } from './redis.js';
 
-dotenv.config();
 
 const PORT = parseInt(process.env.PORT || '3010', 10);
 const HOST = process.env.HOST || '0.0.0.0';

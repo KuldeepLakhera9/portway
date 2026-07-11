@@ -76,8 +76,11 @@ export async function processBuild(projectId: string, deploymentId: string) {
 
   // 3. Formulate clone URL
   // Matches https://github.com/owner/repo -> https://x-access-token:<token>@github.com/owner/repo.git
-  const cloneUrl = project.github_repo_url
-    .replace('https://github.com/', `https://x-access-token:${decryptedToken}@github.com/`) + '.git';
+  let cleanRepoUrl = project.github_repo_url;
+  if (cleanRepoUrl.endsWith('.git')) {
+    cleanRepoUrl = cleanRepoUrl.slice(0, -4);
+  }
+  const cloneUrl = cleanRepoUrl.replace('https://github.com/', `https://x-access-token:${decryptedToken}@github.com/`) + '.git';
 
   const installCmd = project.install_command || 'npm install';
   const buildCmd = project.build_command || 'npm run build';

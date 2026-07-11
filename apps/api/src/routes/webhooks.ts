@@ -51,6 +51,7 @@ export async function webhookRoutes(app: FastifyInstance) {
     const hmac = crypto.createHmac('sha256', project.webhook_secret);
     const digest = 'sha256=' + hmac.update(request.rawBody || '').digest('hex');
 
+
     try {
       if (!crypto.timingSafeEqual(Buffer.from(gitHubSignature), Buffer.from(digest))) {
         return reply.status(401).send({ error: 'Unauthorized', message: 'Invalid signature check failed.' });

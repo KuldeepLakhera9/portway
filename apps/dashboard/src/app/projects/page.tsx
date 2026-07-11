@@ -29,7 +29,7 @@ export default function ProjectsPage() {
         throw new Error("Failed to load projects.");
       })
       .then((data) => {
-        setProjects(data);
+        setProjects(data.projects || []);
         setLoading(false);
       })
       .catch((err) => {

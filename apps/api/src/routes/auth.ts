@@ -191,23 +191,14 @@ export async function authRoutes(app: FastifyInstance) {
         role: 'owner',
       });
 
-      // 6. Set httpOnly Cookie and return JSON
+      // 6. Set httpOnly Cookie and redirect to dashboard
       reply.header(
         'Set-Cookie',
         `token=${sessionJwt}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}`
       );
 
-      return reply.status(200).send({
-        message: 'Successfully authenticated.',
-        token: sessionJwt,
-        user: {
-          id: userId,
-          email,
-          name: userData.name || userData.login,
-          avatarUrl: userData.avatar_url,
-          teamId,
-        },
-      });
+      const dashboardUrl = process.env.DASHBOARD_URL || 'http://localhost:3000';
+      return reply.redirect(`${dashboardUrl}/auth/callback?token=${sessionJwt}`);
 
     } catch (err: any) {
       request.log.error(err, 'Authentication callback failed');

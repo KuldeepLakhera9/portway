@@ -92,6 +92,8 @@ export async function processBuild(projectId: string, deploymentId: string) {
     const formatted = `[${new Date().toISOString()}] ${line}`;
     logBuffer += formatted + '\n';
     redis.publish(`logs:${deploymentId}`, JSON.stringify({ line: formatted }));
+    redis.rpush(`logs:buffer:${deploymentId}`, JSON.stringify({ line: formatted }));
+    redis.expire(`logs:buffer:${deploymentId}`, 3600); // 1 hour TTL buffer
   }
 
   // Set deployment state to building
@@ -284,6 +286,8 @@ echo "Build successful."
          ON CONFLICT (deployment_id) DO UPDATE SET log_url = $2`,
         [deploymentId, logUrl]
       );
+      // Clean up temporary Redis logs buffer
+      await redis.del(`logs:buffer:${deploymentId}`);
     } catch (logS3Err) {
       console.error('Failed to upload build logs to S3:', logS3Err);
     }

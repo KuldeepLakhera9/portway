@@ -204,6 +204,14 @@ export async function projectRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'NotFoundError', message: 'Project not found.' });
     }
 
-    return reply.status(200).send({ project: result.rows[0] });
+    const deploymentsResult = await db.query(
+      'SELECT id, commit_message, commit_author, commit_sha, status, url, created_at FROM deployments WHERE project_id = $1 ORDER BY created_at DESC',
+      [id]
+    );
+
+    return reply.status(200).send({
+      project: result.rows[0],
+      deployments: deploymentsResult.rows,
+    });
   });
 }

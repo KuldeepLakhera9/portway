@@ -9,11 +9,13 @@ declare module 'fastify' {
 }
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import cors from '@fastify/cors';
+import fastifyWebsocket from '@fastify/websocket';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { projectRoutes } from './routes/projects.js';
 import { tokenRoutes } from './routes/tokens.js';
 import { webhookRoutes } from './routes/webhooks.js';
+import { deploymentRoutes } from './routes/deployments.js';
 import { serveDeploymentFile } from './utils/proxy.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -29,10 +31,20 @@ export async function buildApp(): Promise<FastifyInstance> {
     disableRequestLogging: false,
   });
 
-  // Enable CORS
+  // Enable CORS with support for credentials (session cookies) from localhost clients
   await app.register(cors, {
-    origin: '*',
+    origin: (origin, cb) => {
+      if (!origin || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+        cb(null, true);
+        return;
+      }
+      cb(new Error('Not allowed by CORS'), false);
+    },
+    credentials: true,
   });
+
+  // Enable WebSockets
+  await app.register(fastifyWebsocket);
 
   // Capture raw request body for webhook signature verification
   app.addHook('preParsing', async (request, reply, payload) => {
@@ -105,6 +117,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(projectRoutes);
   await app.register(tokenRoutes);
   await app.register(webhookRoutes);
+  await app.register(deploymentRoutes);
 
   // Global Error Handler
   app.setErrorHandler((error, request, reply) => {

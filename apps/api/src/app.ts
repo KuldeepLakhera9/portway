@@ -39,6 +39,15 @@ export async function buildApp(): Promise<FastifyInstance> {
           description: 'Development Server',
         },
       ],
+      components: {
+        securitySchemes: {
+          BearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+          },
+        },
+      },
     },
   });
 

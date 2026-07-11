@@ -19,7 +19,9 @@ async function main() {
 
   // 2. Connect dependencies
   try {
-    await redis.connect();
+    if (redis.status !== 'ready' && redis.status !== 'connecting' && redis.status !== 'connect') {
+      await redis.connect();
+    }
     console.log('Redis connected successfully.');
   } catch (error) {
     console.error('Failed to connect to Redis:', error);

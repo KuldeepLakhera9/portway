@@ -9,6 +9,9 @@
   "scripts": {
     "dev:api": "npm run dev --workspace=apps/api",
     "build:api": "npm run build --workspace=apps/api",
-    "start:api": "npm run start --workspace=apps/api"
+    "start:api": "npm run start --workspace=apps/api",
+    "dev:worker": "npm run dev --workspace=apps/worker",
+    "build:worker": "npm run build --workspace=apps/worker",
+    "start:worker": "npm run start --workspace=apps/worker"
   }
 }

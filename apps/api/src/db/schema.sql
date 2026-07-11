@@ -114,3 +114,7 @@ CREATE INDEX IF NOT EXISTS idx_deployments_project ON deployments(project_id);
 CREATE INDEX IF NOT EXISTS idx_env_vars_project ON environment_variables(project_id);
 CREATE INDEX IF NOT EXISTS idx_domains_project ON domains(project_id);
 CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id);
+
+-- Alter tables to add new columns if they do not exist
+ALTER TABLE deployments ADD COLUMN IF NOT EXISTS source_type VARCHAR(50) NOT NULL DEFAULT 'git';
+ALTER TABLE deployments ADD COLUMN IF NOT EXISTS source_key VARCHAR(255);

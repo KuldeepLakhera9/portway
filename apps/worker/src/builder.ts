@@ -1,12 +1,13 @@
 import pg from 'pg';
 import Docker from 'dockerode';
 import Redis from 'ioredis';
-import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { decrypt } from './utils/encryption.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import tar from 'tar';
+import zlib from 'zlib';
 
 const dbUrl = process.env.DATABASE_URL || 'postgres://portway:portway-secure-pass@localhost:5433/portway';
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -36,7 +37,7 @@ const s3Client = new S3Client({
 
 // Ensure S3 Buckets exist on startup
 export async function initStorage() {
-  const buckets = ['portway-artifacts', 'portway-logs'];
+  const buckets = ['portway-artifacts', 'portway-logs', 'portway-sources'];
   for (const bucket of buckets) {
     try {
       await s3Client.send(new HeadBucketCommand({ Bucket: bucket }));
@@ -54,33 +55,49 @@ export async function initStorage() {
 export async function processBuild(projectId: string, deploymentId: string) {
   console.log(`[Worker] Starting build for project ${projectId}, deployment ${deploymentId}`);
   
-  // 1. Retrieve project settings and owner's github_token
-  const query = `
-    SELECT p.*, u.github_token
-    FROM projects p
-    JOIN team_members tm ON tm.team_id = p.team_id
-    JOIN users u ON u.id = tm.user_id
-    WHERE p.id = $1 AND u.github_token IS NOT NULL
-    LIMIT 1
-  `;
-  
-  const res = await pool.query(query, [projectId]);
-  if (res.rowCount === 0) {
-    throw new Error(`Project ${projectId} not found or user is missing a valid GitHub token.`);
+  // Fetch deployment details to resolve sourceType
+  const depRes = await pool.query(
+    'SELECT source_type, source_key FROM deployments WHERE id = $1',
+    [deploymentId]
+  );
+  if (depRes.rowCount === 0) {
+    throw new Error(`Deployment ${deploymentId} not found in database.`);
   }
+  const deployment = depRes.rows[0];
+  const isZip = deployment.source_type === 'zip';
 
-  const project = res.rows[0];
-  
-  // 2. Decrypt GitHub oauth token
-  const decryptedToken = decrypt(project.github_token, encryptionKey);
-
-  // 3. Formulate clone URL
-  // Matches https://github.com/owner/repo -> https://x-access-token:<token>@github.com/owner/repo.git
-  let cleanRepoUrl = project.github_repo_url;
-  if (cleanRepoUrl.endsWith('.git')) {
-    cleanRepoUrl = cleanRepoUrl.slice(0, -4);
+  // Fetch project settings
+  const projectRes = await pool.query(
+    'SELECT * FROM projects WHERE id = $1',
+    [projectId]
+  );
+  if (projectRes.rowCount === 0) {
+    throw new Error(`Project ${projectId} not found in database.`);
   }
-  const cloneUrl = cleanRepoUrl.replace('https://github.com/', `https://x-access-token:${decryptedToken}@github.com/`) + '.git';
+  const project = projectRes.rows[0];
+
+  let cloneUrl = '';
+  if (!isZip) {
+    // Decrypt team owner's github token
+    const tokenQuery = `
+      SELECT u.github_token
+      FROM users u
+      JOIN team_members tm ON tm.user_id = u.id
+      WHERE tm.team_id = $1 AND tm.role = 'owner' AND u.github_token IS NOT NULL
+      LIMIT 1
+    `;
+    const tokenRes = await pool.query(tokenQuery, [project.team_id]);
+    if (tokenRes.rowCount === 0) {
+      throw new Error(`Owner GitHub token not found for team ${project.team_id}`);
+    }
+    const decryptedToken = decrypt(tokenRes.rows[0].github_token, encryptionKey);
+
+    let cleanRepoUrl = project.github_repo_url;
+    if (cleanRepoUrl.endsWith('.git')) {
+      cleanRepoUrl = cleanRepoUrl.slice(0, -4);
+    }
+    cloneUrl = cleanRepoUrl.replace('https://github.com/', `https://x-access-token:${decryptedToken}@github.com/`) + '.git';
+  }
 
   const installCmd = project.install_command || 'npm install';
   const buildCmd = project.build_command || 'npm run build';
@@ -105,21 +122,71 @@ export async function processBuild(projectId: string, deploymentId: string) {
   appendLog(`Initiating build execution for project: ${project.name}`);
   appendLog(`Using branch: ${project.branch}`);
 
-  // 4. Construct Shell Build Script
-  const buildScript = `
+  const buildDir = isZip ? '/home/node' : '/workspace';
+
+  // 4. Construct Shell Build Script dynamically depending on source type
+  const hasCustomInstall = project.install_command ? "true" : "false";
+  const hasCustomBuild = project.build_command ? "true" : "false";
+
+  let buildScript = '';
+  if (isZip) {
+    buildScript = `
 set -e
-echo "Cloning repository..."
-git clone --depth 1 -b ${project.branch} ${cloneUrl} /workspace
-cd /workspace
+echo "Direct deploy archive loaded."
+cd ${buildDir}
 
-echo "Executing package installation..."
-${installCmd}
+if [ "${hasCustomInstall}" = "true" ]; then
+  echo "Executing custom package installation..."
+  ${installCmd}
+elif [ -f "package.json" ]; then
+  echo "package.json found. Executing package installation..."
+  npm install
+else
+  echo "No package.json found. Skipping installation."
+fi
 
-echo "Executing production build..."
-${buildCmd}
+if [ "${hasCustomBuild}" = "true" ]; then
+  echo "Executing custom production build..."
+  ${buildCmd}
+elif [ -f "package.json" ]; then
+  echo "package.json found. Executing production build..."
+  npm run build
+else
+  echo "No package.json found. Skipping build."
+fi
 
 echo "Build successful."
-`;
+    `;
+  } else {
+    buildScript = `
+set -e
+echo "Cloning repository..."
+git clone --depth 1 -b ${project.branch} ${cloneUrl} ${buildDir}
+cd ${buildDir}
+
+if [ "${hasCustomInstall}" = "true" ]; then
+  echo "Executing custom package installation..."
+  ${installCmd}
+elif [ -f "package.json" ]; then
+  echo "package.json found. Executing package installation..."
+  npm install
+else
+  echo "No package.json found. Skipping installation."
+fi
+
+if [ "${hasCustomBuild}" = "true" ]; then
+  echo "Executing custom production build..."
+  ${buildCmd}
+elif [ -f "package.json" ]; then
+  echo "package.json found. Executing production build..."
+  npm run build
+else
+  echo "No package.json found. Skipping build."
+fi
+
+echo "Build successful."
+    `;
+  }
 
   let container: Docker.Container | null = null;
   let exitCode = -1;
@@ -154,6 +221,22 @@ echo "Build successful."
     });
 
     appendLog('Spawning build container container...');
+
+    if (isZip) {
+      appendLog('Downloading and extracting direct deployment archive...');
+      try {
+        const s3Obj = await s3Client.send(new GetObjectCommand({
+          Bucket: 'portway-sources',
+          Key: deployment.source_key,
+        }));
+        
+        const tarStream = (s3Obj.Body as any).pipe(zlib.createGunzip());
+        await container.putArchive(tarStream, { path: buildDir });
+      } catch (err: any) {
+        throw new Error(`Failed to load or extract direct deploy archive: ${err.message || err}`);
+      }
+    }
+
     await container.start();
 
     // 6. Hook logs and stream
@@ -188,10 +271,24 @@ echo "Build successful."
     }
 
     // 8. Capture build output archive folder from container
-    appendLog(`Retrieving static build assets from: /workspace/${outDir}`);
-    const archiveStream = await container.getArchive({
-      path: `/workspace/${outDir}`,
-    });
+    let archivePath = `${buildDir}/${outDir}`;
+    let archiveStream: NodeJS.ReadableStream;
+    try {
+      appendLog(`Retrieving static build assets from: ${archivePath}`);
+      archiveStream = await container.getArchive({
+        path: archivePath,
+      });
+    } catch (archiveErr: any) {
+      if (archiveErr.statusCode === 404 && !project.output_dir) {
+        appendLog(`Output directory '${outDir}' not found. Falling back to project root directory.`);
+        archivePath = buildDir;
+        archiveStream = await container.getArchive({
+          path: archivePath,
+        });
+      } else {
+        throw archiveErr;
+      }
+    }
 
     // 9. Extract and upload files individually to MinIO
     appendLog('Extracting and uploading static assets to MinIO S3...');
@@ -204,7 +301,7 @@ echo "Build successful."
           .on('finish', resolve);
       });
 
-      const extractedOutDir = path.join(tmpDir, outDir);
+      const extractedOutDir = path.join(tmpDir, path.basename(archivePath));
       if (!fs.existsSync(extractedOutDir)) {
         throw new Error(`Expected output directory not found after extraction: ${extractedOutDir}`);
       }

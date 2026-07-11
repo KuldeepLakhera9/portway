@@ -1,0 +1,25 @@
+{
+  "name": "portway-cli",
+  "version": "1.0.0",
+  "description": "Portway CLI - Deploy static sites in seconds",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "portway": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "tar": "^6.2.1",
+    "ws": "^8.17.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/tar": "^6.1.13",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.5.2"
+  }
+}

@@ -16,6 +16,7 @@ import { projectRoutes } from './routes/projects.js';
 import { tokenRoutes } from './routes/tokens.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { deploymentRoutes } from './routes/deployments.js';
+import { deployRoutes } from './routes/deploy.js';
 import { serveDeploymentFile } from './utils/proxy.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -45,6 +46,11 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Enable WebSockets
   await app.register(fastifyWebsocket);
+
+  // Register raw binary parser for direct tarball uploads
+  app.addContentTypeParser('application/octet-stream', (request, payload, done) => {
+    done(null, payload);
+  });
 
   // Capture raw request body for webhook signature verification
   app.addHook('preParsing', async (request, reply, payload) => {
@@ -118,6 +124,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(tokenRoutes);
   await app.register(webhookRoutes);
   await app.register(deploymentRoutes);
+  await app.register(deployRoutes);
 
   // Global Error Handler
   app.setErrorHandler((error, request, reply) => {

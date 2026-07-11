@@ -222,6 +222,8 @@ export async function authRoutes(app: FastifyInstance) {
               properties: {
                 id: { type: 'string' },
                 email: { type: 'string', nullable: true },
+                name: { type: 'string', nullable: true },
+                avatarUrl: { type: 'string', nullable: true },
                 teamId: { type: 'string' },
                 role: { type: 'string' },
               },
@@ -231,8 +233,26 @@ export async function authRoutes(app: FastifyInstance) {
       },
     },
   }, async (request, reply) => {
+    const userRes = await db.query(
+      'SELECT id, name, email, avatar_url FROM users WHERE id = $1',
+      [request.user!.id]
+    );
+
+    if (userRes.rowCount === 0) {
+      return reply.status(404).send({ error: 'NotFoundError', message: 'User not found.' });
+    }
+
+    const dbUser = userRes.rows[0];
+
     return reply.status(200).send({
-      user: request.user,
+      user: {
+        id: dbUser.id,
+        email: dbUser.email,
+        name: dbUser.name || 'Developer',
+        avatarUrl: dbUser.avatar_url,
+        teamId: request.user!.teamId,
+        role: request.user!.role,
+      },
     });
   });
 }

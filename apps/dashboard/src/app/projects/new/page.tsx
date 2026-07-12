@@ -38,7 +38,7 @@ export default function NewProjectPage() {
         throw new Error("Failed to load repositories from GitHub.");
       })
       .then((data) => {
-        setRepos(data);
+        setRepos(data.repos || []);
         setLoadingRepos(false);
       })
       .catch((err) => {

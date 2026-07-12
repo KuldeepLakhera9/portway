@@ -1,5 +1,12 @@
-export const API_BASE = 'http://localhost:3010';
-export const WS_BASE = 'ws://localhost:3010';
+const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+
+export const API_BASE = isLocal 
+  ? 'http://localhost:3010' 
+  : 'https://api.kuldeeplakhera.me';
+
+export const WS_BASE = isLocal 
+  ? 'ws://localhost:3010' 
+  : 'wss://api.kuldeeplakhera.me';
 
 export function getAuthToken(): string | null {
   if (typeof window !== 'undefined') {

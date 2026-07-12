@@ -22,7 +22,13 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: 'ConfigurationError', message: 'GitHub OAuth is not configured on this server.' });
     }
 
-    const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(GITHUB_CALLBACK_URL)}&scope=read:user,user:email,repo,admin:repo_hook`;
+    const host = request.headers.host || '';
+    const isLocalHost = host.includes('localhost') || host.includes('127.0.0.1');
+    const callbackUrl = isLocalHost
+      ? GITHUB_CALLBACK_URL
+      : 'https://api.kuldeeplakhera.me/auth/github/callback';
+
+    const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(callbackUrl)}&scope=read:user,user:email,repo,admin:repo_hook`;
     
     return reply.redirect(githubAuthUrl);
   });
@@ -51,6 +57,12 @@ export async function authRoutes(app: FastifyInstance) {
 
     try {
       // 1. Exchange OAuth code for Access Token
+      const host = request.headers.host || '';
+      const isLocalHost = host.includes('localhost') || host.includes('127.0.0.1');
+      const callbackUrl = isLocalHost
+        ? GITHUB_CALLBACK_URL
+        : 'https://api.kuldeeplakhera.me/auth/github/callback';
+
       const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
         method: 'POST',
         headers: {
@@ -61,7 +73,7 @@ export async function authRoutes(app: FastifyInstance) {
           client_id: GITHUB_CLIENT_ID,
           client_secret: GITHUB_CLIENT_SECRET,
           code,
-          redirect_uri: GITHUB_CALLBACK_URL,
+          redirect_uri: callbackUrl,
         }),
       });
 
@@ -197,7 +209,9 @@ export async function authRoutes(app: FastifyInstance) {
         `token=${sessionJwt}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}`
       );
 
-      const dashboardUrl = process.env.DASHBOARD_URL || 'http://localhost:3000';
+      const dashboardUrl = isLocalHost 
+        ? (process.env.DASHBOARD_URL || 'http://localhost:3000') 
+        : 'https://portway.kuldeeplakhera.me';
       return reply.redirect(`${dashboardUrl}/auth/callback?token=${sessionJwt}`);
 
     } catch (err: any) {

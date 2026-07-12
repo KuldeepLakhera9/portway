@@ -32,10 +32,15 @@ export async function buildApp(): Promise<FastifyInstance> {
     disableRequestLogging: false,
   });
 
-  // Enable CORS with support for credentials (session cookies) from localhost clients
   await app.register(cors, {
     origin: (origin, cb) => {
-      if (!origin || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+      if (
+        !origin || 
+        origin.startsWith('http://localhost:') || 
+        origin.startsWith('http://127.0.0.1:') ||
+        origin === 'https://portway.kuldeeplakhera.me' ||
+        origin.endsWith('.trycloudflare.com')
+      ) {
         cb(null, true);
         return;
       }
